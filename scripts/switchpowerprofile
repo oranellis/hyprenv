@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# Ensure the script is run as root
+if [[ "$EUID" -ne 0 ]]; then
+    echo "This script must be run as root. Use sudo." >&2
+    exit 1
+fi
+
+# Path to CPU0's governor settings
+cpu0="/sys/devices/system/cpu/cpu0/cpufreq"
+
+# Read current and available governors
+current_governor=$(cat "$cpu0/scaling_governor")
+available=($(cat "$cpu0/scaling_available_governors"))
+
+# Find index of current governor
+for i in "${!available[@]}"; do
+    if [[ "${available[$i]}" == "$current_governor" ]]; then
+        current_index=$i
+        break
+    fi
+done
+
+# Calculate next governor (wrap around)
+next_index=$(( (current_index + 1) % ${#available[@]} ))
+next_governor="${available[$next_index]}"
+
+echo "Switching from $current_governor to $next_governor"
+
+# Apply new governor to all CPU cores
+for cpu_path in /sys/devices/system/cpu/cpu[0-9]*; do
+    gov_file="$cpu_path/cpufreq/scaling_governor"
+    [ -f "$gov_file" ] && echo "$next_governor" > "$gov_file"
+done
